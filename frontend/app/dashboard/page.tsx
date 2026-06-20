@@ -10,6 +10,11 @@ export default function DashboardPage() {
   const [path, setPath] = useState<any[]>([{ _id: null, name: 'Library' }]);
   const [dailyStats, setDailyStats] = useState<any>(null);
   const [selectedQuizzes, setSelectedQuizzes] = useState<string[]>([]);
+  const [showMiscModal, setShowMiscModal] = useState(false);
+  const [allQuizzes, setAllQuizzes] = useState<any[]>([]);
+  const [miscSelectedQuizzes, setMiscSelectedQuizzes] = useState<string[]>([]);
+  const [questionLimit, setQuestionLimit] = useState<number>(20);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number>(15);
   const router = useRouter();
 
   useEffect(() => {
@@ -77,11 +82,54 @@ export default function DashboardPage() {
     }
   };
 
+  const loadAllQuizzes = async () => {
+    try {
+      const list = await api.quizzes.list();
+      setAllQuizzes(list);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (showMiscModal && allQuizzes.length === 0) {
+      loadAllQuizzes();
+    }
+  }, [showMiscModal]);
+
+  const startMiscQuiz = async (mode: 'practice' | 'quiz') => {
+    if (miscSelectedQuizzes.length === 0) return;
+    try {
+      const title = `Miscellaneous Test (${new Date().toLocaleDateString()})`;
+      const timeLimitSeconds = timeLimitMinutes * 60;
+      
+      const newQuiz = await api.quizzes.combine({
+        quiz_ids: miscSelectedQuizzes,
+        title,
+        question_limit: questionLimit,
+        time_limit_seconds: timeLimitSeconds
+      });
+      
+      router.push(`/quiz/${newQuiz._id}?mode=${mode}`);
+    } catch (err: any) {
+      alert("Error starting miscellaneous quiz: " + err.message);
+    }
+  };
+
   return (
     <div className="container" style={{ paddingBottom: '5rem' }}>
-      <header style={{ marginBottom: '2.5rem' }}>
-        <h1 className="hero-title" style={{ marginBottom: '0.5rem' }}>Welcome back!</h1>
-        <p style={{ color: 'var(--muted)', fontSize: '1rem' }}>Ready to crush it today?</p>
+      <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 className="hero-title" style={{ marginBottom: '0.5rem' }}>Welcome back!</h1>
+          <p style={{ color: 'var(--muted)', fontSize: '1rem' }}>Ready to crush it today?</p>
+        </div>
+        <button 
+          className="btn-primary" 
+          onClick={() => setShowMiscModal(true)} 
+          style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, var(--secondary), var(--accent))' }}
+        >
+          🎲 Miscellaneous Test
+        </button>
       </header>
 
 
@@ -258,6 +306,143 @@ export default function DashboardPage() {
             </div>
         </div>
       </div>
+
+      {showMiscModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '1.5rem'
+        }}>
+          <div className="card" style={{
+            width: '100%',
+            maxWidth: '550px',
+            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95))',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            padding: '2rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            borderRadius: '16px'
+          }}>
+            <div className="flex justify-between items-center" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--foreground)' }}>🎲 Miscellaneous Test</h3>
+              <button 
+                onClick={() => setShowMiscModal(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.5rem', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+                SELECT TESTS TO INHERIT QUESTIONS FROM
+              </label>
+              <div style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '0.75rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+                background: 'rgba(0,0,0,0.1)'
+              }}>
+                {allQuizzes.length === 0 ? (
+                  <p style={{ color: 'var(--muted)', fontSize: '0.9rem', textAlign: 'center', padding: '1rem' }}>Loading available tests...</p>
+                ) : (
+                  allQuizzes.map(q => (
+                    <label key={q._id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--foreground)' }}>
+                      <input 
+                        type="checkbox"
+                        checked={miscSelectedQuizzes.includes(q._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMiscSelectedQuizzes([...miscSelectedQuizzes, q._id]);
+                          } else {
+                            setMiscSelectedQuizzes(miscSelectedQuizzes.filter(id => id !== q._id));
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span>{q.title}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-4" style={{ flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '120px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+                  NO. OF QUESTIONS
+                </label>
+                <input 
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={questionLimit}
+                  onChange={(e) => setQuestionLimit(parseInt(e.target.value) || 10)}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+
+              <div style={{ flex: 1, minWidth: '120px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+                  TIME LIMIT (MINS)
+                </label>
+                <input 
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={timeLimitMinutes}
+                  onChange={(e) => setTimeLimitMinutes(parseInt(e.target.value) || 10)}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4" style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowMiscModal(false)}
+                style={{ padding: '0.75rem 1.25rem' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-secondary" 
+                onClick={() => startMiscQuiz('practice')}
+                disabled={miscSelectedQuizzes.length === 0}
+                style={{ padding: '0.75rem 1.25rem' }}
+              >
+                Practice Shuffled
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={() => startMiscQuiz('quiz')}
+                disabled={miscSelectedQuizzes.length === 0}
+                style={{ padding: '0.75rem 1.25rem' }}
+              >
+                Start Exam (Timed)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -56,7 +56,7 @@ export const api = {
     delete: (id: string) => request(`/folders/${id}`, { method: 'DELETE' }),
   },
   quizzes: {
-    list: (folderId: string) => request(`/quizzes/?folder_id=${folderId}`),
+    list: (folderId?: string) => request(`/quizzes/?folder_id=${folderId || ''}`),
     get: (id: string) => request(`/quizzes/${id}`),
     createManual: (data: any) => request('/quizzes/create-manual', { method: 'POST', body: JSON.stringify(data) }),
     upload: (formData: FormData) => fetch(`${API_BASE_URL}/quizzes/upload`, {
@@ -66,7 +66,7 @@ export const api = {
             'Authorization': `Bearer ${Cookies.get('token')}`
         }
     }).then(res => res.ok ? res.json() : res.json().then(e => { throw new Error(e.detail) })),
-    combine: (data: { quiz_ids: string[], title: string, folder_id: string }) => request('/quizzes/combine', { method: 'POST', body: JSON.stringify(data) }),
+    combine: (data: { quiz_ids: string[], title: string, folder_id?: string, question_limit?: number, time_limit_seconds?: number }) => request('/quizzes/combine', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: string) => request(`/quizzes/${id}`, { method: 'DELETE' }),
   },
   attempts: {

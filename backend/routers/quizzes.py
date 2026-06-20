@@ -119,7 +119,9 @@ import random
 class CombineQuizzesRequest(BaseModel):
     quiz_ids: List[str]
     title: str
-    folder_id: str
+    folder_id: Optional[str] = None
+    question_limit: Optional[int] = None
+    time_limit_seconds: Optional[int] = None
 
 @router.post("/combine", response_model=Quiz)
 async def combine_quizzes(
@@ -151,11 +153,26 @@ async def combine_quizzes(
         
     random.shuffle(all_questions)
     
+    # Apply question limit if set
+    if req.question_limit and req.question_limit > 0:
+        all_questions = all_questions[:req.question_limit]
+        
+    # Resolve folder_id
+    folder_id_val = None
+    if req.folder_id and ObjectId.is_valid(req.folder_id):
+        folder_id_val = ObjectId(req.folder_id)
+    elif quizzes:
+        folder_id_val = quizzes[0].get("folder_id")
+        
+    if not folder_id_val:
+        folder_id_val = ObjectId('000000000000000000000000')
+    
     quiz_dict = {
         "title": req.title,
-        "folder_id": ObjectId(req.folder_id),
+        "folder_id": folder_id_val,
         "questions": all_questions,
         "is_combined": True,
+        "time_limit_seconds": req.time_limit_seconds,
         "created_at": datetime.utcnow()
     }
     
@@ -164,13 +181,16 @@ async def combine_quizzes(
     return quiz_dict
 
 @router.get("/", response_model=List[Quiz])
-async def list_quizzes(folder_id: str, user: dict = Depends(get_current_user)):
-    query_id = folder_id
-    if ObjectId.is_valid(folder_id):
-        query_id = ObjectId(folder_id)
+async def list_quizzes(folder_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"is_combined": {"$ne": True}}
+    if folder_id:
+        query_id = folder_id
+        if ObjectId.is_valid(folder_id):
+            query_id = ObjectId(folder_id)
+        query["folder_id"] = query_id
         
-    cursor = db.quizzes.find({"folder_id": query_id, "is_combined": {"$ne": True}})
-    quizzes = await cursor.to_list(length=100)
+    cursor = db.quizzes.find(query)
+    quizzes = await cursor.to_list(length=200)
     return quizzes
 
 @router.get("/{quiz_id}", response_model=Quiz)

@@ -60,6 +60,7 @@ class Quiz(MongoBaseModel):
     folder_id: PyObjectId
     questions: List[Question]
     is_combined: Optional[bool] = False
+    time_limit_seconds: Optional[int] = None
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
 class Attempt(MongoBaseModel):

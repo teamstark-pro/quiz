@@ -201,6 +201,15 @@ export default function QuizPage() {
     loadComparison();
   };
 
+  useEffect(() => {
+    if (quiz && quiz.time_limit_seconds && !isFinished) {
+      if (timer >= quiz.time_limit_seconds) {
+        alert("⏰ Time is up! Your quiz will be automatically submitted.");
+        finishQuiz();
+      }
+    }
+  }, [timer, quiz, isFinished]);
+
   const loadComparison = async () => {
     try {
         const comp = await api.attempts.getComparison(id as string);
@@ -475,7 +484,18 @@ export default function QuizPage() {
             <div className="card" style={{ padding: '0.6rem 1.2rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)' }}>
                 <span style={{ opacity: 0.6 }}>⏱️</span>
                 <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', fontSize: '1.1rem' }}>
-                    {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+                    {quiz.time_limit_seconds ? (
+                      <>
+                        {(() => {
+                          const rem = Math.max(0, quiz.time_limit_seconds - timer);
+                          const m = Math.floor(rem / 60);
+                          const s = rem % 60;
+                          return `${m}:${s.toString().padStart(2, '0')}`;
+                        })()}
+                      </>
+                    ) : (
+                      `${Math.floor(timer / 60)}:${(timer % 60).toString().padStart(2, '0')}`
+                    )}
                 </span>
             </div>
             <button className="btn-secondary" style={{ padding: '0.6rem 1.2rem', borderRadius: '999px', fontSize: '0.9rem' }} onClick={() => finishQuiz()}>
