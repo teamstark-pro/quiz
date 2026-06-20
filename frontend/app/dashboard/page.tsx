@@ -9,13 +9,12 @@ export default function DashboardPage() {
   const [currentFolder, setCurrentFolder] = useState<any>(null);
   const [path, setPath] = useState<any[]>([{ _id: null, name: 'Library' }]);
   const [dailyStats, setDailyStats] = useState<any>(null);
-  const [quote, setQuote] = useState('');
+  const [selectedQuizzes, setSelectedQuizzes] = useState<string[]>([]);
   const router = useRouter();
 
   useEffect(() => {
     loadContent(null);
     loadDailyStats();
-    loadQuote();
   }, []);
 
   const loadDailyStats = async () => {
@@ -27,17 +26,9 @@ export default function DashboardPage() {
     }
   }
 
-  const loadQuote = async () => {
-    try {
-      const res = await api.ai.getHumorousMotivation();
-      setQuote(res.quote);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
   const loadContent = async (folderId: string | null, folderName?: string) => {
     try {
+      setSelectedQuizzes([]);
       const folderList = await api.folders.list(folderId || undefined);
       setFolders(folderList);
       
@@ -67,6 +58,25 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCombineAndStart = async (mode: 'practice' | 'quiz') => {
+    if (selectedQuizzes.length === 0) return;
+    try {
+      const folderName = currentFolder ? currentFolder.name : 'Library';
+      const title = `Combined Quiz: ${folderName} (${new Date().toLocaleDateString()})`;
+      const folderId = currentFolder?._id || '';
+      
+      const newQuiz = await api.quizzes.combine({
+        quiz_ids: selectedQuizzes,
+        title,
+        folder_id: folderId
+      });
+      
+      router.push(`/quiz/${newQuiz._id}?mode=${mode}`);
+    } catch (err: any) {
+      alert("Error combining quizzes: " + err.message);
+    }
+  };
+
   return (
     <div className="container" style={{ paddingBottom: '5rem' }}>
       <header style={{ marginBottom: '2.5rem' }}>
@@ -74,22 +84,7 @@ export default function DashboardPage() {
         <p style={{ color: 'var(--muted)', fontSize: '1rem' }}>Ready to crush it today?</p>
       </header>
 
-      {quote && (
-          <div className="card mb-8" style={{ 
-            background: 'linear-gradient(135deg, rgba(244, 114, 182, 0.1), rgba(129, 140, 248, 0.1))',
-            borderColor: 'rgba(244, 114, 182, 0.2)',
-            padding: '1.25rem 1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem'
-          }}>
-              <span style={{ fontSize: '2rem' }}>👺</span>
-              <div>
-                <strong style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '0.25rem' }}>DESI COACH SAYS:</strong>
-                <p style={{ fontSize: '1.1rem', fontWeight: 700, fontStyle: 'italic', color: 'var(--foreground)' }}>"{quote}"</p>
-              </div>
-          </div>
-      )}
+
 
       <div className="flex-responsive" style={{ gap: '2rem' }}>
         <div style={{ flex: 2 }}>
@@ -136,9 +131,61 @@ export default function DashboardPage() {
                 {quizzes.length > 0 && (
                 <div style={{ marginTop: '2.5rem' }}>
                     <h3 style={{ marginBottom: '1.25rem', fontWeight: 800, fontSize: '1.2rem' }}>Available Quizzes</h3>
+                    
+                    {selectedQuizzes.length > 0 && (
+                      <div className="card mb-6" style={{ 
+                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(236, 72, 153, 0.15))',
+                        borderColor: 'var(--primary)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '1.25rem 1.5rem',
+                        gap: '1rem',
+                        flexWrap: 'wrap',
+                        borderRadius: '16px'
+                      }}>
+                        <div>
+                          <strong style={{ fontSize: '1.1rem', color: 'var(--foreground)' }}>Combined Practice ({selectedQuizzes.length} Selected)</strong>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                            Questions from selected quizzes will be merged and shuffled.
+                          </p>
+                        </div>
+                        <div className="flex gap-3 ml-auto" style={{ alignItems: 'center' }}>
+                          <button className="btn-primary" style={{ padding: '0.7rem 1.5rem' }} onClick={() => handleCombineAndStart('practice')}>
+                            Practice Shuffled
+                          </button>
+                          <button className="btn-secondary" style={{ padding: '0.7rem 1.5rem' }} onClick={() => handleCombineAndStart('quiz')}>
+                            Quiz Shuffled
+                          </button>
+                          <button className="btn-secondary" style={{ padding: '0.7rem 1rem', borderColor: 'transparent', background: 'transparent' }} onClick={() => setSelectedQuizzes([])}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="folder-grid">
                     {quizzes.map(quiz => (
-                        <div key={quiz._id} className="card quiz-card" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.7))' }}>
+                        <div key={quiz._id} className="card quiz-card" style={{ 
+                            padding: '1.5rem', 
+                            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.7))',
+                            position: 'relative',
+                            border: selectedQuizzes.includes(quiz._id) ? '1px solid var(--primary)' : '1px solid var(--border)'
+                        }}>
+                        <div style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', zIndex: 10 }}>
+                            <input 
+                              type="checkbox" 
+                              checked={selectedQuizzes.includes(quiz._id)} 
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedQuizzes([...selectedQuizzes, quiz._id]);
+                                } else {
+                                  setSelectedQuizzes(selectedQuizzes.filter(id => id !== quiz._id));
+                                }
+                              }}
+                              style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer' }}
+                            />
+                        </div>
                         <div className="flex items-center gap-4">
                             <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', boxShadow: '0 4px 10px var(--primary-glow)' }}>
                             📝

@@ -66,6 +66,8 @@ export const api = {
             'Authorization': `Bearer ${Cookies.get('token')}`
         }
     }).then(res => res.ok ? res.json() : res.json().then(e => { throw new Error(e.detail) })),
+    combine: (data: { quiz_ids: string[], title: string, folder_id: string }) => request('/quizzes/combine', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) => request(`/quizzes/${id}`, { method: 'DELETE' }),
   },
   attempts: {
     submit: (data: any) => request('/attempts/', { method: 'POST', body: JSON.stringify(data) }),

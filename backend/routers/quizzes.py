@@ -114,13 +114,62 @@ async def upload_quiz(
     quiz_dict["_id"] = result.inserted_id
     return quiz_dict
 
+import random
+
+class CombineQuizzesRequest(BaseModel):
+    quiz_ids: List[str]
+    title: str
+    folder_id: str
+
+@router.post("/combine", response_model=Quiz)
+async def combine_quizzes(
+    req: CombineQuizzesRequest,
+    user: dict = Depends(get_current_user)
+):
+    if not req.quiz_ids:
+        raise HTTPException(status_code=400, detail="No quiz IDs provided")
+    
+    object_ids = []
+    for qid in req.quiz_ids:
+        if ObjectId.is_valid(qid):
+            object_ids.append(ObjectId(qid))
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid quiz ID: {qid}")
+            
+    cursor = db.quizzes.find({"_id": {"$in": object_ids}})
+    quizzes = await cursor.to_list(length=100)
+    
+    if not quizzes:
+        raise HTTPException(status_code=404, detail="No quizzes found matching the provided IDs")
+        
+    all_questions = []
+    for quiz in quizzes:
+        all_questions.extend(quiz.get("questions", []))
+        
+    if not all_questions:
+        raise HTTPException(status_code=400, detail="Selected quizzes contain no questions")
+        
+    random.shuffle(all_questions)
+    
+    quiz_dict = {
+        "title": req.title,
+        "folder_id": ObjectId(req.folder_id),
+        "questions": all_questions,
+        "is_combined": True,
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.quizzes.insert_one(quiz_dict)
+    quiz_dict["_id"] = result.inserted_id
+    return quiz_dict
+
 @router.get("/", response_model=List[Quiz])
 async def list_quizzes(folder_id: str, user: dict = Depends(get_current_user)):
     query_id = folder_id
     if ObjectId.is_valid(folder_id):
         query_id = ObjectId(folder_id)
         
-    cursor = db.quizzes.find({"folder_id": query_id})
+    cursor = db.quizzes.find({"folder_id": query_id, "is_combined": {"$ne": True}})
     quizzes = await cursor.to_list(length=100)
     return quizzes
 
@@ -130,9 +179,6 @@ async def get_quiz(quiz_id: str, user: dict = Depends(get_current_user)):
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
     
-    # If not practice mode and not admin, hide correct answers? 
-    # Actually, let's keep it simple for now and just return the quiz.
-    # We can filter answers on the frontend or have a separate endpoint for attempts.
     return quiz
 
 @router.delete("/{quiz_id}")

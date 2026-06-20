@@ -6,6 +6,7 @@ import Cookies from 'js-cookie';
 
 export default function AdminPage() {
   const [folders, setFolders] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<any[]>([]);
   const [currentFolder, setCurrentFolder] = useState<any>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [quizTitle, setQuizTitle] = useState('');
@@ -34,6 +35,9 @@ export default function AdminPage() {
         const folderDetails = await api.folders.get(parentId);
         setCurrentFolder(folderDetails);
         
+        const quizData = await api.quizzes.list(parentId);
+        setQuizzes(quizData);
+        
         if (folderName) {
             const index = path.findIndex(p => p._id === parentId);
             if (index !== -1) {
@@ -44,10 +48,25 @@ export default function AdminPage() {
         }
       } else {
         setCurrentFolder(null);
+        setQuizzes([]);
         setPath([{ _id: null, name: 'Root' }]);
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const deleteQuiz = async (quizId: string, quizTitle: string) => {
+    if (!confirm(`Are you sure you want to delete the quiz "${quizTitle}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.quizzes.delete(quizId);
+      setMessage("✅ Quiz deleted successfully");
+      await loadFolders(currentFolder?._id || null);
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err: any) {
+      setMessage("❌ Error: " + err.message);
     }
   };
 
@@ -111,6 +130,9 @@ export default function AdminPage() {
       setQuizTitle('');
       setFile(null);
       setPasteContent('');
+      if (currentFolder?._id) {
+        await loadFolders(currentFolder._id);
+      }
       setMessage("✅ Quiz published successfully");
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
@@ -178,7 +200,7 @@ export default function AdminPage() {
               <div style={{ padding: '0.5rem', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)' }}>
                  📁
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Folders</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Folders & Quizzes</h3>
             </div>
             
             <div className="flex flex-col gap-3 mb-8">
@@ -197,9 +219,9 @@ export default function AdminPage() {
 
             <div className="flex flex-col gap-3">
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.05em' }}>
-                  CURRENT: {currentFolder ? currentFolder.name.toUpperCase() : 'ROOT'}
+                  SUBFOLDERS IN: {currentFolder ? currentFolder.name.toUpperCase() : 'ROOT'}
               </label>
-              {folders.length === 0 && <p style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '12px' }}>No subfolders found here.</p>}
+              {folders.length === 0 && <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '12px', fontSize: '0.9rem' }}>No subfolders found here.</p>}
               {folders.map(f => (
                 <div key={f._id} className="flex justify-between items-center p-4" style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
                   <div className="flex items-center gap-3">
@@ -213,6 +235,29 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+
+            {currentFolder && (
+              <div className="flex flex-col gap-3 mt-6" style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+                    QUIZZES IN: {currentFolder.name.toUpperCase()}
+                </label>
+                {quizzes.length === 0 && <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '12px', fontSize: '0.9rem' }}>No quizzes/JSONs uploaded in this folder yet.</p>}
+                {quizzes.map(q => (
+                  <div key={q._id} className="flex justify-between items-center p-4" style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap-3">
+                        <span style={{ fontSize: '1.25rem' }}>📝</span>
+                        <div className="flex flex-col">
+                          <span style={{ fontWeight: 600 }}>{q.title}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{q.questions.length} Questions</span>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button className="btn-secondary" style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--error)', borderColor: 'rgba(239, 68, 68, 0.2)' }} onClick={() => deleteQuiz(q._id, q.title)}>🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
