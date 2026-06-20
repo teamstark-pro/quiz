@@ -310,6 +310,31 @@ export default function QuizPage() {
     
     return (
       <div className="container py-12">
+        <style dangerouslySetInnerHTML={{__html: `
+          @media print {
+            body, html {
+              background: white !important;
+              color: black !important;
+            }
+            .container {
+              padding: 0 !important;
+              margin: 0 !important;
+              max-width: 100% !important;
+            }
+            button, .btn-primary, .btn-secondary, header, nav, footer, .no-print {
+              display: none !important;
+            }
+            .card {
+              background: white !important;
+              color: black !important;
+              border: 1px solid #ddd !important;
+              box-shadow: none !important;
+              page-break-inside: avoid !important;
+              margin-bottom: 1.5rem !important;
+              padding: 1.5rem !important;
+            }
+          }
+        `}} />
         <div className="flex flex-col items-center mb-12">
             <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>
                 {percentage >= 80 ? '🏆' : percentage >= 50 ? '👏' : '📚'}
@@ -457,9 +482,12 @@ export default function QuizPage() {
             })}
         </div>
         
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-4 no-print">
             <button className="btn-primary" style={{ padding: '1rem 4rem', fontSize: '1.1rem' }} onClick={() => router.push('/dashboard')}>
                 Return to Dashboard
+            </button>
+            <button className="btn-secondary" style={{ padding: '1rem 3rem', fontSize: '1.1rem', background: 'linear-gradient(135deg, var(--secondary), var(--accent))', borderColor: 'transparent', color: 'white' }} onClick={() => window.print()}>
+                🖨️ Print / Save PDF
             </button>
         </div>
       </div>
