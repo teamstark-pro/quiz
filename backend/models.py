@@ -72,6 +72,8 @@ class Attempt(MongoBaseModel):
     total_questions: int
     responses: List[Optional[int]]
     question_times: Optional[List[int]] = None # Time in seconds per question
+    statuses: Optional[List[str]] = None # Track question statuses like 'answered', 'marked', etc.
+    marked_for_review: Optional[List[bool]] = None
     status: str = "completed"  # "in_progress" or "completed"
     current_question_index: int = 0
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)

@@ -12,6 +12,7 @@ async function request(path: string, options: RequestInit = {}) {
   };
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: 'no-store',
     ...options,
     headers,
   });
@@ -76,7 +77,7 @@ export const api = {
     getTopicAnalysis: () => request('/attempts/topic-analysis'),
     getLeaderboard: () => request('/attempts/leaderboard'),
     getComparison: (quizId: string) => request(`/attempts/comparison/${quizId}`),
-    getDailyStats: () => request('/attempts/daily-stats'),
+    getDailyStats: (tzOffset?: number) => request(`/attempts/daily-stats?tz_offset=${tzOffset !== undefined ? tzOffset : ''}`),
   },
   ai: {
     ask: (data: any) => request('/ai/ask', { method: 'POST', body: JSON.stringify(data) }),

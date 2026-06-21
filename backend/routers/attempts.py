@@ -4,7 +4,7 @@ from database import db
 from models import Attempt, PyObjectId
 from security import get_current_user
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
 
@@ -23,11 +23,16 @@ async def submit_attempt(attempt: Attempt, user: dict = Depends(get_current_user
     # Check if we are updating an existing attempt
     # The frontend sends 'id', which Pydantic might put in attempt.id
     if attempt.id:
-        # Update existing attempt
+        # Update existing attempt - preserve original created_at
+        update_fields = {k: v for k, v in attempt_dict.items() if k not in ["_id", "created_at"]}
         await db.attempts.update_one(
             {"_id": ObjectId(attempt.id), "user_id": user["_id"]},
-            {"$set": {k: v for k, v in attempt_dict.items() if k != "_id"}}
+            {"$set": update_fields}
         )
+        # Load the original attempt from the DB to get the original created_at
+        existing = await db.attempts.find_one({"_id": ObjectId(attempt.id)})
+        if existing:
+            attempt_dict["created_at"] = existing.get("created_at")
         attempt_dict["_id"] = attempt.id
         return attempt_dict
     else:
@@ -100,8 +105,11 @@ async def get_topic_analysis(user: dict = Depends(get_current_user)):
     return analysis
 
 @router.get("/daily-stats")
-async def get_daily_stats(user: dict = Depends(get_current_user)):
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+async def get_daily_stats(tz_offset: Optional[int] = 0, user: dict = Depends(get_current_user)):
+    offset_mins = tz_offset if tz_offset is not None else 0
+    local_now = datetime.utcnow() - timedelta(minutes=offset_mins)
+    local_today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = local_today_start + timedelta(minutes=offset_mins)
     
     # User stats today
     pipeline_user = [

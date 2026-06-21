@@ -24,7 +24,8 @@ export default function DashboardPage() {
 
   const loadDailyStats = async () => {
     try {
-      const stats = await api.attempts.getDailyStats();
+      const tzOffset = new Date().getTimezoneOffset();
+      const stats = await api.attempts.getDailyStats(tzOffset);
       setDailyStats(stats);
     } catch (err) {
       console.error(err);
