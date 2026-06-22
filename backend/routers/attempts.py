@@ -12,6 +12,11 @@ router = APIRouter(prefix="/attempts", tags=["attempts"])
 async def submit_attempt(attempt: Attempt, user: dict = Depends(get_current_user)):
     # Use model_dump instead of dict()
     attempt_dict = attempt.model_dump(by_alias=True, exclude={"id"})
+    
+    # Ensure quiz_id is stored as ObjectId, not string
+    if isinstance(attempt_dict.get("quiz_id"), str):
+        attempt_dict["quiz_id"] = ObjectId(attempt_dict["quiz_id"])
+        
     attempt_dict["user_id"] = user["_id"]
     attempt_dict["updated_at"] = datetime.utcnow()
     
