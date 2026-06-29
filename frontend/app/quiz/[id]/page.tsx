@@ -29,25 +29,87 @@ export default function QuizPage() {
   const [statuses, setStatuses] = useState<string[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [questionOrder, setQuestionOrder] = useState<number[]>([]);
+  const [optionOrders, setOptionOrders] = useState<number[][]>([]);
   const [sidebarTab, setSidebarTab] = useState<'palette' | 'ai'>('palette');
   
   const timerRef = useRef<any>(null);
   const autoSaveRef = useRef<any>(null);
 
   useEffect(() => {
-    loadQuizAndCheckProgress();
-    startTimer();
-    
-    // Auto-save progress every 30 seconds
-    autoSaveRef.current = setInterval(() => {
-        saveProgress();
-    }, 30000);
+    const attemptId = searchParams.get('attemptId');
+    if (attemptId) {
+      loadAttemptForReview(attemptId);
+    } else {
+      loadQuizAndCheckProgress();
+      startTimer();
+      
+      // Auto-save progress every 30 seconds
+      autoSaveRef.current = setInterval(() => {
+          saveProgress();
+      }, 30000);
+    }
 
     return () => {
         clearInterval(timerRef.current);
         clearInterval(autoSaveRef.current);
     };
   }, []);
+
+  const loadAttemptForReview = async (attemptId: string) => {
+    try {
+      const attemptData = await api.attempts.getDetail(attemptId);
+      const quizData = await api.quizzes.get(attemptData.quiz_id);
+      
+      setQuiz(quizData);
+      setUserResponses(attemptData.responses);
+      setQuestionTimes(attemptData.question_times || new Array(quizData.questions.length).fill(0));
+      setTimer(attemptData.time_taken_seconds);
+      setIsFinished(true);
+      setActiveAttemptId(attemptId);
+      
+      if (attemptData.question_order && attemptData.question_order.length === quizData.questions.length) {
+        setQuestionOrder(attemptData.question_order);
+      } else {
+        setQuestionOrder(Array.from({ length: quizData.questions.length }, (_, i) => i));
+      }
+      
+      if (attemptData.option_orders && attemptData.option_orders.length === quizData.questions.length) {
+        setOptionOrders(attemptData.option_orders);
+      } else {
+        const sequentialOptionOrders = quizData.questions.map((qItem: any) =>
+          Array.from({ length: qItem.options.length }, (_, idx) => idx)
+        );
+        setOptionOrders(sequentialOptionOrders);
+      }
+      
+      if (attemptData.statuses) {
+        setStatuses(attemptData.statuses);
+      }
+      
+      // Trigger load comparison
+      try {
+        const comp = await api.attempts.getComparison(attemptData.quiz_id);
+        setComparisonData(comp);
+        
+        // Trigger AI analysis
+        setIsAiAnalyzing(true);
+        const analysis = await api.ai.analyzePerformance({
+            user_score: attemptData.score,
+            user_time: attemptData.time_taken_seconds,
+            peer_avg_score: comp.peer_summary.avg_score || 0,
+            peer_avg_time: comp.peer_summary.avg_time || 0,
+            total_questions: quizData.questions.length * 2
+        });
+        setAiAnalysis(analysis.analysis);
+        setIsAiAnalyzing(false);
+      } catch (err) {
+        console.error("Failed to load comparison inside review", err);
+      }
+    } catch (err) {
+      console.error("Failed to load attempt for review", err);
+      router.push('/dashboard');
+    }
+  };
 
   const loadQuizAndCheckProgress = async () => {
     try {
@@ -62,7 +124,7 @@ export default function QuizPage() {
         setUserResponses(new Array(quizData.questions.length).fill(null));
         setQuestionTimes(new Array(quizData.questions.length).fill(0));
         setLastQuestionStartTime(0);
-
+ 
         // Shuffle question order!
         const indices = Array.from({ length: quizData.questions.length }, (_, i) => i);
         for (let i = indices.length - 1; i > 0; i--) {
@@ -70,6 +132,17 @@ export default function QuizPage() {
             [indices[i], indices[j]] = [indices[j], indices[i]];
         }
         setQuestionOrder(indices);
+ 
+        // Shuffle options for each question!
+        const generatedOptionOrders = quizData.questions.map((qItem: any) => {
+            const optIndices = Array.from({ length: qItem.options.length }, (_, optIdx) => optIdx);
+            for (let i = optIndices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [optIndices[i], optIndices[j]] = [optIndices[j], optIndices[i]];
+            }
+            return optIndices;
+        });
+        setOptionOrders(generatedOptionOrders);
         
         const initialStatuses = new Array(quizData.questions.length).fill('not_visited');
         initialStatuses[indices[0]] = 'not_answered';
@@ -96,6 +169,17 @@ export default function QuizPage() {
                 setQuestionOrder(activeAttempt.question_order);
             } else {
                 setQuestionOrder(Array.from({ length: quiz.questions.length }, (_, i) => i));
+            }
+
+            // Resume option orders
+            if (activeAttempt.option_orders && activeAttempt.option_orders.length === quiz.questions.length) {
+                setOptionOrders(activeAttempt.option_orders);
+            } else {
+                // Fallback to sequential option orders
+                const fallbackOptionOrders = quiz.questions.map((qItem: any) => 
+                    Array.from({ length: qItem.options.length }, (_, idx) => idx)
+                );
+                setOptionOrders(fallbackOptionOrders);
             }
             
             if (activeAttempt.statuses && activeAttempt.statuses.length === quiz.questions.length) {
@@ -145,6 +229,17 @@ export default function QuizPage() {
         [indices[i], indices[j]] = [indices[j], indices[i]];
     }
     setQuestionOrder(indices);
+
+    // Shuffle options for each question!
+    const generatedOptionOrders = quiz.questions.map((qItem: any) => {
+        const optIndices = Array.from({ length: qItem.options.length }, (_, optIdx) => optIdx);
+        for (let i = optIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [optIndices[i], optIndices[j]] = [optIndices[j], optIndices[i]];
+        }
+        return optIndices;
+    });
+    setOptionOrders(generatedOptionOrders);
     
     const initialStatuses = new Array(quiz.questions.length).fill('not_visited');
     initialStatuses[indices[0]] = 'not_answered';
@@ -170,10 +265,18 @@ export default function QuizPage() {
         updatedTimes[origIndex] += (timer - lastQuestionStartTime);
     }
     
+    // Calculate score with +2 / -0.66 marking scheme
     let score = 0;
     userResponses.forEach((res, i) => {
-      if (res === quiz.questions[i].correct_option_index) score++;
+      if (res !== null) {
+        if (res === quiz.questions[i].correct_option_index) {
+          score += 2;
+        } else {
+          score -= 0.66;
+        }
+      }
     });
+    score = Math.round(score * 100) / 100;
 
     const activeStatuses = customStatuses || statuses;
     const activeOrder = customOrder || questionOrder;
@@ -190,6 +293,7 @@ export default function QuizPage() {
         question_times: updatedTimes,
         statuses: activeStatuses,
         question_order: activeOrder,
+        option_orders: optionOrders,
         status: final ? "completed" : "in_progress",
         current_question_index: currentQuestionIndex
       });
@@ -356,10 +460,18 @@ export default function QuizPage() {
 
     setIsFinished(true);
     
+    // Calculate score with +2 / -0.66 marking scheme
     let score = 0;
     userResponses.forEach((res, i) => {
-      if (res === quiz.questions[i].correct_option_index) score++;
+      if (res !== null) {
+        if (res === quiz.questions[i].correct_option_index) {
+          score += 2;
+        } else {
+          score -= 0.66;
+        }
+      }
     });
+    score = Math.round(score * 100) / 100;
 
     await api.attempts.submit({
       id: activeAttemptId,
@@ -372,6 +484,7 @@ export default function QuizPage() {
       question_times: finalTimes,
       statuses: statuses,
       question_order: questionOrder,
+      option_orders: optionOrders,
       status: "completed",
       current_question_index: currentQuestionIndex
     });
@@ -394,18 +507,25 @@ export default function QuizPage() {
         setComparisonData(comp);
         
         // Trigger AI analysis
-        let score = 0;
+        let schemeScore = 0;
         userResponses.forEach((res, i) => {
-          if (res === quiz.questions[i].correct_option_index) score++;
+          if (res !== null) {
+            if (res === quiz.questions[i].correct_option_index) {
+              schemeScore += 2;
+            } else {
+              schemeScore -= 0.66;
+            }
+          }
         });
+        schemeScore = Math.round(schemeScore * 100) / 100;
 
         setIsAiAnalyzing(true);
         const analysis = await api.ai.analyzePerformance({
-            user_score: score,
+            user_score: schemeScore,
             user_time: timer,
             peer_avg_score: comp.peer_summary.avg_score || 0,
             peer_avg_time: comp.peer_summary.avg_time || 0,
-            total_questions: quiz.questions.length
+            total_questions: quiz.questions.length * 2
         });
         setAiAnalysis(analysis.analysis);
         setIsAiAnalyzing(false);
@@ -504,10 +624,19 @@ export default function QuizPage() {
 
   if (isFinished) {
     let score = 0;
+    let correctCount = 0;
     userResponses.forEach((res, i) => {
-      if (res === quiz.questions[i].correct_option_index) score++;
+      if (res !== null) {
+        if (res === quiz.questions[i].correct_option_index) {
+          score += 2;
+          correctCount++;
+        } else {
+          score -= 0.66;
+        }
+      }
     });
-    const percentage = Math.round((score / quiz.questions.length) * 100);
+    score = Math.round(score * 100) / 100;
+    const percentage = Math.max(0, Math.round((correctCount / quiz.questions.length) * 100));
     
     return (
       <div className="container py-12">
@@ -547,10 +676,10 @@ export default function QuizPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="card flex flex-col items-center p-8">
                 <span style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Final Score</span>
-                <span style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary)' }}>{score} / {quiz.questions.length}</span>
+                <span style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary)' }}>{score} / {quiz.questions.length * 2}</span>
                 {comparisonData && (
                     <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
-                        Peer Avg: <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>{comparisonData.peer_summary.avg_score.toFixed(1)}</span>
+                        Peer Avg: <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>{comparisonData.peer_summary.avg_score.toFixed(2)}</span>
                     </div>
                 )}
             </div>
@@ -628,29 +757,35 @@ export default function QuizPage() {
                         <p style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>{qItem.text}</p>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-                            {qItem.options.map((opt: string, optIdx: number) => (
-                                <div key={optIdx} style={{ 
-                                    padding: '1rem', 
-                                    borderRadius: '12px', 
-                                    background: optIdx === qItem.correct_option_index ? 'rgba(16, 185, 129, 0.05)' : optIdx === userRes ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.02)',
-                                    border: '1px solid',
-                                    borderColor: optIdx === qItem.correct_option_index ? 'rgba(16, 185, 129, 0.2)' : optIdx === userRes ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.05)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '3rem'
-                                }}>
-                                    <div style={{ 
-                                        width: '24px', height: '24px', borderRadius: '50%', 
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800,
-                                        background: optIdx === qItem.correct_option_index ? 'var(--success)' : optIdx === userRes ? 'var(--error)' : 'rgba(255,255,255,0.1)'
-                                    }}>
-                                        {String.fromCharCode(65 + optIdx)}
-                                    </div>
-                                    <span style={{ opacity: (optIdx !== qItem.correct_option_index && optIdx !== userRes) ? 0.6 : 1 }}>{opt}</span>
-                                    {optIdx === qItem.correct_option_index && <span style={{ marginLeft: 'auto' }}>✅</span>}
-                                    {optIdx === userRes && optIdx !== qItem.correct_option_index && <span style={{ marginLeft: 'auto' }}>❌</span>}
-                                </div>
-                            ))}
+                            {(() => {
+                                const optOrder = optionOrders[origIdx] || Array.from({ length: qItem.options.length }, (_, idx) => idx);
+                                return optOrder.map((origOptIdx: number, visualIdx: number) => {
+                                    const opt = qItem.options[origOptIdx];
+                                    return (
+                                        <div key={origOptIdx} style={{ 
+                                            padding: '1rem', 
+                                            borderRadius: '12px', 
+                                            background: origOptIdx === qItem.correct_option_index ? 'rgba(16, 185, 129, 0.05)' : origOptIdx === userRes ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.02)',
+                                            border: '1px solid',
+                                            borderColor: origOptIdx === qItem.correct_option_index ? 'rgba(16, 185, 129, 0.2)' : origOptIdx === userRes ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.05)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '3rem'
+                                        }}>
+                                            <div style={{ 
+                                                width: '24px', height: '24px', borderRadius: '50%', 
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800,
+                                                background: origOptIdx === qItem.correct_option_index ? 'var(--success)' : origOptIdx === userRes ? 'var(--error)' : 'rgba(255,255,255,0.1)'
+                                            }}>
+                                                {String.fromCharCode(65 + visualIdx)}
+                                            </div>
+                                            <span style={{ opacity: (origOptIdx !== qItem.correct_option_index && origOptIdx !== userRes) ? 0.6 : 1 }}>{opt}</span>
+                                            {origOptIdx === qItem.correct_option_index && <span style={{ marginLeft: 'auto' }}>✅</span>}
+                                            {origOptIdx === userRes && origOptIdx !== qItem.correct_option_index && <span style={{ marginLeft: 'auto' }}>❌</span>}
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
 
                         <div className="flex flex-col gap-4">
@@ -1226,6 +1361,12 @@ export default function QuizPage() {
         .mobile-sidebar-toggle {
           display: none;
         }
+        .logo-text-mobile {
+          display: none;
+        }
+        .logo-text-desktop {
+          display: inline;
+        }
         .markdown-body h1, .markdown-body h2, .markdown-body h3 { color: #818cf8; margin-top: 1rem; margin-bottom: 0.5rem; font-size: 1.1rem; }
         .markdown-body p { margin-bottom: 0.75rem; font-size: 0.85rem; }
         .markdown-body ul, .markdown-body ol { margin-bottom: 0.75rem; padding-left: 1.25rem; }
@@ -1293,18 +1434,96 @@ export default function QuizPage() {
             padding: 0.5rem 0.75rem;
           }
         }
+        @media (max-width: 480px) {
+          .quiz-minimal-header {
+            padding: 0 0.5rem;
+            gap: 0.25rem;
+          }
+          .quiz-logo {
+            font-size: 0.85rem;
+          }
+          .logo-text-desktop {
+            display: none;
+          }
+          .logo-text-mobile {
+            display: inline;
+          }
+          .quiz-title-header {
+            display: none;
+          }
+          .quiz-header-right {
+            gap: 0.35rem;
+          }
+          .quiz-timer {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+          }
+          .btn-submit-exam {
+            padding: 0.35rem 0.6rem;
+            font-size: 0.7rem;
+          }
+          .mobile-sidebar-toggle {
+            padding: 0.35rem 0.5rem;
+            font-size: 0.7rem;
+          }
+          .quiz-question-header {
+            padding: 0.75rem 1rem;
+          }
+          .q-number-label {
+            font-size: 0.9rem;
+          }
+          .q-marking-info {
+            gap: 0.4rem;
+            font-size: 0.7rem;
+          }
+          .quiz-question-body {
+            padding: 1rem;
+          }
+          .quiz-question-text {
+            font-size: 1rem;
+            line-height: 1.5;
+            margin-bottom: 1.25rem;
+          }
+          .quiz-options-list {
+            gap: 0.75rem;
+          }
+          .quiz-option-card {
+            padding: 0.75rem 0.9rem;
+            gap: 0.6rem;
+            border-radius: 10px;
+          }
+          .option-letter {
+            width: 26px;
+            height: 26px;
+            font-size: 0.8rem;
+          }
+          .option-text {
+            font-size: 0.85rem;
+          }
+          .quiz-question-footer {
+            padding: 0.6rem;
+            gap: 0.4rem;
+          }
+          .btn-quiz-footer {
+            height: 36px;
+            font-size: 0.7rem !important;
+            padding: 0.3rem 0.5rem;
+          }
+          .footer-left-buttons, .footer-right-buttons {
+            gap: 0.4rem;
+          }
+        }
       ` }} />
 
       {/* Minimal Header */}
       <header className="quiz-minimal-header">
         <div className="quiz-logo">
-          {mode === 'practice' ? (
-            <>
-              QuizMaster Portal <span className="practice-badge">Practice</span>
-            </>
-          ) : (
-            "QuizMaster Portal"
-          )}
+          <span className="logo-text-desktop">
+            QuizMaster Portal {mode === 'practice' && <span className="practice-badge">Practice</span>}
+          </span>
+          <span className="logo-text-mobile">
+            QM {mode === 'practice' && <span className="practice-badge">Practice</span>}
+          </span>
         </div>
         <div className="quiz-title-header">{quiz.title}</div>
         <div className="quiz-header-right">
@@ -1326,8 +1545,8 @@ export default function QuizPage() {
           <div className="quiz-question-header">
             <span className="q-number-label">Question {currentQuestionIndex + 1} of {quiz.questions.length}</span>
             <div className="q-marking-info">
-              <span className="mark-positive">+1.0</span>
-              <span className="mark-negative">-0.25</span>
+              <span className="mark-positive">+2.0</span>
+              <span className="mark-negative">-0.66</span>
             </div>
           </div>
 
@@ -1335,34 +1554,38 @@ export default function QuizPage() {
             <div className="quiz-question-text">{q.text}</div>
             
             <div className="quiz-options-list">
-              {q.options.map((opt: string, i: number) => {
-                const isSelected = userResponses[origIndex] === i;
-                const isCorrect = i === q.correct_option_index;
+              {(() => {
+                const optOrder = optionOrders[origIndex] || Array.from({ length: q.options.length }, (_, idx) => idx);
+                return optOrder.map((origOptIdx: number, visualIdx: number) => {
+                  const opt = q.options[origOptIdx];
+                  const isSelected = userResponses[origIndex] === origOptIdx;
+                  const isCorrect = origOptIdx === q.correct_option_index;
 
-                let optionClass = '';
-                if (isSelected) {
-                  if (mode === 'practice' && showFeedback) {
-                    optionClass = isCorrect ? 'correct' : 'incorrect';
-                  } else {
-                    optionClass = 'selected';
+                  let optionClass = '';
+                  if (isSelected) {
+                    if (mode === 'practice' && showFeedback) {
+                      optionClass = isCorrect ? 'correct' : 'incorrect';
+                    } else {
+                      optionClass = 'selected';
+                    }
+                  } else if (mode === 'practice' && showFeedback && isCorrect) {
+                    optionClass = 'correct';
                   }
-                } else if (mode === 'practice' && showFeedback && isCorrect) {
-                  optionClass = 'correct';
-                }
 
-                return (
-                  <div 
-                    key={i} 
-                    className={`quiz-option-card ${optionClass} ${mode === 'practice' && showFeedback ? 'disabled' : ''}`}
-                    onClick={() => handleOptionSelect(i)}
-                  >
-                    <div className="option-letter">{String.fromCharCode(65 + i)}</div>
-                    <div className="option-text">{opt}</div>
-                    {mode === 'practice' && showFeedback && isCorrect && <span style={{ marginLeft: 'auto' }}>✅</span>}
-                    {mode === 'practice' && showFeedback && isSelected && !isCorrect && <span style={{ marginLeft: 'auto' }}>❌</span>}
-                  </div>
-                );
-              })}
+                  return (
+                    <div 
+                      key={origOptIdx} 
+                      className={`quiz-option-card ${optionClass} ${mode === 'practice' && showFeedback ? 'disabled' : ''}`}
+                      onClick={() => handleOptionSelect(origOptIdx)}
+                    >
+                      <div className="option-letter">{String.fromCharCode(65 + visualIdx)}</div>
+                      <div className="option-text">{opt}</div>
+                      {mode === 'practice' && showFeedback && isCorrect && <span style={{ marginLeft: 'auto' }}>✅</span>}
+                      {mode === 'practice' && showFeedback && isSelected && !isCorrect && <span style={{ marginLeft: 'auto' }}>❌</span>}
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
             {mode === 'practice' && showFeedback && q.explanation && (

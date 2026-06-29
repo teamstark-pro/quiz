@@ -74,7 +74,7 @@ async def ask_ai(req: AIRequest, user: dict = Depends(get_current_user)):
             raise HTTPException(status_code=500, detail=str(e))
 
 class AIComparisonRequest(BaseModel):
-    user_score: int
+    user_score: float
     user_time: int
     peer_avg_score: float
     peer_avg_time: float

@@ -78,6 +78,9 @@ export const api = {
     getLeaderboard: () => request('/attempts/leaderboard'),
     getComparison: (quizId: string) => request(`/attempts/comparison/${quizId}`),
     getDailyStats: (tzOffset?: number) => request(`/attempts/daily-stats?tz_offset=${tzOffset !== undefined ? tzOffset : ''}`),
+    getHistory: () => request('/attempts/history'),
+    getDetail: (id: string) => request(`/attempts/detail/${id}`),
+    getDeepAnalysis: () => request('/attempts/deep-analysis'),
   },
   ai: {
     ask: (data: any) => request('/ai/ask', { method: 'POST', body: JSON.stringify(data) }),
