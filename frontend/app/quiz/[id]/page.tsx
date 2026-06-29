@@ -114,6 +114,12 @@ export default function QuizPage() {
   const loadQuizAndCheckProgress = async () => {
     try {
       const quizData = await api.quizzes.get(id as string);
+      
+      const timeLimitParam = searchParams.get('timeLimit');
+      if (timeLimitParam) {
+        quizData.time_limit_seconds = parseInt(timeLimitParam);
+      }
+      
       setQuiz(quizData);
       
       const activeAttempt = await api.attempts.getActive(id as string);

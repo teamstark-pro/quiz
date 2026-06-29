@@ -15,6 +15,10 @@ export default function DashboardPage() {
   const [miscSelectedQuizzes, setMiscSelectedQuizzes] = useState<string[]>([]);
   const [questionLimit, setQuestionLimit] = useState<number>(20);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number>(15);
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [selectedQuizForStart, setSelectedQuizForStart] = useState<any>(null);
+  const [selectedModeForStart, setSelectedModeForStart] = useState<'practice' | 'quiz'>('practice');
+  const [customTimeLimitMinutes, setCustomTimeLimitMinutes] = useState<number>(15);
   const router = useRouter();
 
   useEffect(() => {
@@ -31,6 +35,19 @@ export default function DashboardPage() {
       console.error(err);
     }
   }
+
+  const handleStartSetup = (quiz: any, mode: 'practice' | 'quiz') => {
+    setSelectedQuizForStart(quiz);
+    setSelectedModeForStart(mode);
+    setCustomTimeLimitMinutes(Math.ceil((quiz.time_limit_seconds || 900) / 60));
+    setShowStartModal(true);
+  };
+
+  const handleLaunchQuiz = () => {
+    if (!selectedQuizForStart) return;
+    router.push(`/quiz/${selectedQuizForStart._id}?mode=${selectedModeForStart}&timeLimit=${customTimeLimitMinutes * 60}`);
+    setShowStartModal(false);
+  };
 
   const loadContent = async (folderId: string | null, folderName?: string) => {
     try {
@@ -247,10 +264,10 @@ export default function DashboardPage() {
                             </div>
                         </div>
                         <div className="flex gap-2 mt-4">
-                            <button className="btn-primary w-full" onClick={() => router.push(`/quiz/${quiz._id}?mode=practice`)} style={{ padding: '0.7rem' }}>
+                            <button className="btn-primary w-full" onClick={() => handleStartSetup(quiz, 'practice')} style={{ padding: '0.7rem' }}>
                             Practice
                             </button>
-                            <button className="btn-secondary w-full" onClick={() => router.push(`/quiz/${quiz._id}?mode=quiz`)} style={{ padding: '0.7rem' }}>
+                            <button className="btn-secondary w-full" onClick={() => handleStartSetup(quiz, 'quiz')} style={{ padding: '0.7rem' }}>
                             Quiz
                             </button>
                         </div>
@@ -439,6 +456,120 @@ export default function DashboardPage() {
                 style={{ padding: '0.75rem 1.25rem' }}
               >
                 Start Exam (Timed)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStartModal && selectedQuizForStart && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '1.5rem'
+        }}>
+          <div className="card" style={{
+            width: '100%',
+            maxWidth: '500px',
+            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95))',
+            borderColor: 'rgba(129, 140, 248, 0.25)',
+            padding: '2rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            borderRadius: '16px'
+          }}>
+            <div className="flex justify-between items-center" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
+                📝 Setup: {selectedQuizForStart.title}
+              </h3>
+              <button 
+                onClick={() => setShowStartModal(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.5rem', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <span className="badge badge-primary" style={{ textTransform: 'uppercase', fontSize: '0.65rem', padding: '0.25rem 0.5rem' }}>
+                  Mode: {selectedModeForStart === 'quiz' ? 'Exam (Timed)' : 'Practice (Untimed / Assisted)'}
+                </span>
+              </div>
+
+              {/* Time limit setup */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+                  SET TIME LIMIT (MINUTES)
+                </label>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <input 
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={customTimeLimitMinutes}
+                    onChange={(e) => setCustomTimeLimitMinutes(Math.max(1, parseInt(e.target.value) || 1))}
+                    style={{ width: '100px', padding: '0.6rem 0.8rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: 'white', fontWeight: 700 }}
+                  />
+                  <span style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>minutes</span>
+                </div>
+              </div>
+
+              {/* Marking Scheme Alert Panel */}
+              <div style={{
+                background: 'rgba(129, 140, 248, 0.05)',
+                border: '1px solid rgba(129, 140, 248, 0.15)',
+                borderRadius: '12px',
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem'
+              }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                  ⚖️ Marking Scheme
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
+                  <div style={{ padding: '0.5rem', background: 'rgba(52, 211, 153, 0.05)', border: '1px solid rgba(52, 211, 153, 0.15)', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', fontWeight: 600 }}>Correct</span>
+                    <strong style={{ fontSize: '1.1rem', color: 'var(--success)' }}>+2.0</strong>
+                  </div>
+                  <div style={{ padding: '0.5rem', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', fontWeight: 600 }}>Incorrect</span>
+                    <strong style={{ fontSize: '1.1rem', color: 'var(--error)' }}>-0.66</strong>
+                  </div>
+                  <div style={{ padding: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', fontWeight: 600 }}>Unanswered</span>
+                    <strong style={{ fontSize: '1.1rem', color: 'var(--muted)' }}>0.0</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4" style={{ justifyContent: 'flex-end' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowStartModal(false)}
+                style={{ padding: '0.75rem 1.2rem' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleLaunchQuiz}
+                style={{ padding: '0.75rem 1.5rem', textShadow: 'none' }}
+              >
+                🚀 Launch Test
               </button>
             </div>
           </div>
